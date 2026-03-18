@@ -3,6 +3,7 @@ const express = require('express');
 const axios = require('axios');
 const path = require('path');
 const cors = require('cors');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,45 +14,47 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Kalshi API Configuration
-const KALSHI_API_BASE = process.env.KALSHI_API_BASE || 'https://trading-api.kalshi.com/trade-api/v2';
-const EMAIL = process.env.KALSHI_EMAIL;
-const PASSWORD = process.env.KALSHI_PASSWORD;
+const KALSHI_API_BASE = process.env.KALSHI_API_BASE || 'https://trading-api.kalshi.com';
 
-let kalshiToken = null;
+// API Keys
+const KEY_ID = process.env.KALSHI_KEY_ID;
+// Handle potential newline formatting issues from env variables
+const PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY ? process.env.KALSHI_PRIVATE_KEY.replace(/\\n/g, '\n') : null;
 
-// Middleware to ensure we have a valid Kalshi authentication token
-async function ensureAuth(req, res, next) {
-    if (!kalshiToken) {
-        try {
-            console.log("Authenticating with Kalshi...");
-            const loginRes = await axios.post(`${KALSHI_API_BASE}/login`, {
-                email: EMAIL,
-                password: PASSWORD
-            });
-            kalshiToken = loginRes.data.token;
-            console.log("Authentication successful.");
-        } catch (error) {
-            console.error('Kalshi Login Error:', error.response?.data || error.message);
-            return res.status(401).json({ error: 'Failed to authenticate with Kalshi API. Check credentials.' });
-        }
+// Helper function to generate RSA signed headers for Kalshi API V2
+function getAuthHeaders(method, requestPath) {
+    if (!KEY_ID || !PRIVATE_KEY) {
+        throw new Error("Missing KALSHI_KEY_ID or KALSHI_PRIVATE_KEY environment variables.");
     }
-    next();
+    
+    const timestamp = Date.now().toString();
+    const msgString = timestamp + method + requestPath;
+    
+    const sign = crypto.createSign('RSA-SHA256');
+    sign.update(msgString);
+    sign.end();
+    
+    const signature = sign.sign(PRIVATE_KEY, 'base64');
+    
+    return {
+        'KALSHI-ACCESS-KEY': KEY_ID,
+        'KALSHI-ACCESS-SIGNATURE': signature,
+        'KALSHI-ACCESS-TIMESTAMP': timestamp,
+        'Content-Type': 'application/json'
+    };
 }
 
 // Endpoint: Fetch the active 15m BTC Market
-app.get('/api/market', ensureAuth, async (req, res) => {
+app.get('/api/market', async (req, res) => {
     try {
-        // You can override the series ticker via environment variable if Kalshi updates it
         const seriesTicker = process.env.BTC_SERIES_TICKER || 'KXBTC'; 
         
-        const marketRes = await axios.get(`${KALSHI_API_BASE}/markets`, {
-            headers: { Authorization: `Bearer ${kalshiToken}` },
-            params: {
-                series_ticker: seriesTicker,
-                status: 'open',
-                limit: 1 // Fetch the most immediate open market
-            }
-        });
+        // Exact path is required for the signature to match
+        const requestPath = `/trade-api/v2/markets?limit=1&series_ticker=${seriesTicker}&status=open`;
+        
+        const headers = getAuthHeaders('GET', requestPath);
+
+        const marketRes = await axios.get(`${KALSHI_API_BASE}${requestPath}`, { headers });
 
         if (marketRes.data.markets && marketRes.data.markets.length > 0) {
             res.json({ market: marketRes.data.markets[0] });
@@ -59,14 +62,13 @@ app.get('/api/market', ensureAuth, async (req, res) => {
             res.status(404).json({ error: 'No open 15m BTC markets found at this time.' });
         }
     } catch (error) {
-        // If unauthorized, clear token so we re-authenticate on the next request
-        if (error.response?.status === 401) kalshiToken = null; 
-        res.status(500).json({ error: error.response?.data || error.message });
+        console.error('Market Fetch Error:', error.response?.data || error.message);
+        res.status(500).json({ error: error.response?.data?.error?.message || error.message || "Failed to connect to Kalshi" });
     }
 });
 
 // Endpoint: Receive frontend hotkey trigger and execute order
-app.post('/api/order', ensureAuth, async (req, res) => {
+app.post('/api/order', async (req, res) => {
     const { action, side, count, max_price, ticker } = req.body;
     
     if (!ticker) {
@@ -81,7 +83,7 @@ app.post('/api/order', ensureAuth, async (req, res) => {
             side: side.toLowerCase(),     // 'yes' or 'no'
             count: parseInt(count),
             type: 'limit',
-            client_order_id: Date.now().toString() // Unique ID to prevent dupes
+            client_order_id: crypto.randomUUID() // Standard UUID for Kalshi orders
         };
 
         // Kalshi requires the price parameter to match the side
@@ -91,19 +93,17 @@ app.post('/api/order', ensureAuth, async (req, res) => {
             orderPayload.no_price = parseInt(max_price);
         }
 
+        const requestPath = '/trade-api/v2/portfolio/orders';
+        const headers = getAuthHeaders('POST', requestPath);
+
         console.log(`Executing ${action.toUpperCase()} for ${count} ${side.toUpperCase()} contracts on ${ticker} at ${max_price}c`);
 
-        const orderRes = await axios.post(`${KALSHI_API_BASE}/portfolio/orders`, orderPayload, {
-            headers: { Authorization: `Bearer ${kalshiToken}` }
-        });
+        const orderRes = await axios.post(`${KALSHI_API_BASE}${requestPath}`, orderPayload, { headers });
 
         res.json({ success: true, order: orderRes.data.order });
     } catch (error) {
-        // If unauthorized, clear token
-        if (error.response?.status === 401) kalshiToken = null;
         console.error('Order Error:', error.response?.data || error.message);
-        
-        const errMsg = error.response?.data?.error?.message || 'Failed to place order';
+        const errMsg = error.response?.data?.error?.message || error.message || 'Failed to place order';
         res.status(500).json({ error: errMsg });
     }
 });

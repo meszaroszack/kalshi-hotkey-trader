@@ -3,7 +3,7 @@
 This is a lightweight manual trading interface configured to trade 15-minute BTC markets on Kalshi instantly using your keyboard arrow keys.
 
 ## Features
-- **Node.js Express Backend:** Serves the frontend securely, handles API authentication out of sight from the client, and makes orders server-side.
+- **Node.js Express Backend:** Serves the frontend securely, using Kalshi API Keys to completely bypass 2FA issues.
 - **Frontend UI:** Single page, dark mode interface (Tailwind CSS) that loads your current active market automatically.
 - **Hotkeys:** Pressing `Up Arrow` executes a `BUY`. Pressing `Down Arrow` executes a `SELL`. Parameters are pulled directly from the UI input fields.
 
@@ -20,9 +20,8 @@ This is a lightweight manual trading interface configured to trade 15-minute BTC
 3. **Configure Environment Variables:**
    - On the Railway dashboard for your newly deployed service, go to the **Variables** tab.
    - Add the following environment variables:
-     - `KALSHI_EMAIL`: Your Kalshi account email.
-     - `KALSHI_PASSWORD`: Your Kalshi account password.
-     - `KALSHI_API_BASE`: (Optional) Defaults to `https://trading-api.kalshi.com/trade-api/v2`. 
+     - `KALSHI_KEY_ID`: Your Kalshi API Key ID.
+     - `KALSHI_PRIVATE_KEY`: Your Kalshi Private Key string (include the `-----BEGIN RSA PRIVATE KEY-----` wrapper).
      - `BTC_SERIES_TICKER`: (Optional) Defaults to `KXBTC`. 
 
 4. **Access your App:**
