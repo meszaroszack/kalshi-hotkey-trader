@@ -101,8 +101,12 @@ apiRouter.get('/market', async (req, res) => {
 
             let targetMarket;
             if (liveMarkets.length > 0) {
-                // If multiple match, pick the one that closes soonest.
-                targetMarket = liveMarkets.sort(
+                // If multiple "live" markets exist, prefer the one whose ticker ends with "-00"
+                // (e.g., KXBTC15M-26MAR180000-00). If none match, pick the one that closes soonest.
+                const preferred = liveMarkets.filter(m => typeof m.ticker === 'string' && m.ticker.endsWith('-00'));
+                const pool = preferred.length > 0 ? preferred : liveMarkets;
+
+                targetMarket = pool.sort(
                     (a, b) => new Date(a.close_time) - new Date(b.close_time)
                 )[0];
             } else {
