@@ -18,30 +18,50 @@ const KALSHI_API_BASE = process.env.KALSHI_API_BASE || 'https://trading-api.kals
 
 // API Keys
 const KEY_ID = process.env.KALSHI_KEY_ID;
-// Handle potential newline formatting issues from env variables
-const PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY ? process.env.KALSHI_PRIVATE_KEY.replace(/\\n/g, '\n') : null;
+let PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY;
+
+// Auto-fix mangled private keys from Railway
+if (PRIVATE_KEY) {
+    PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, '\n');
+    if (!PRIVATE_KEY.includes('\n')) {
+        // If Railway stripped all newlines and replaced them with spaces, reconstruct the PEM format
+        PRIVATE_KEY = PRIVATE_KEY.replace('-----BEGIN RSA PRIVATE KEY-----', '-----BEGIN RSA PRIVATE KEY-----\n');
+        PRIVATE_KEY = PRIVATE_KEY.replace('-----END RSA PRIVATE KEY-----', '\n-----END RSA PRIVATE KEY-----');
+        const parts = PRIVATE_KEY.split('\n');
+        if (parts.length === 3) {
+            const base64Body = parts[1].replace(/ /g, '\n');
+            PRIVATE_KEY = `${parts[0]}\n${base64Body}\n${parts[2]}`;
+        }
+    }
+}
 
 // Helper function to generate RSA signed headers for Kalshi API V2
 function getAuthHeaders(method, requestPath) {
     if (!KEY_ID || !PRIVATE_KEY) {
-        throw new Error("Missing KALSHI_KEY_ID or KALSHI_PRIVATE_KEY environment variables.");
+        throw new Error("Missing KALSHI_KEY_ID or KALSHI_PRIVATE_KEY in Railway Variables.");
     }
     
     const timestamp = Date.now().toString();
     const msgString = timestamp + method + requestPath;
     
-    const sign = crypto.createSign('RSA-SHA256');
-    sign.update(msgString);
-    sign.end();
-    
-    const signature = sign.sign(PRIVATE_KEY, 'base64');
-    
-    return {
-        'KALSHI-ACCESS-KEY': KEY_ID,
-        'KALSHI-ACCESS-SIGNATURE': signature,
-        'KALSHI-ACCESS-TIMESTAMP': timestamp,
-        'Content-Type': 'application/json'
-    };
+    try {
+        const sign = crypto.createSign('RSA-SHA256');
+        sign.update(msgString);
+        sign.end();
+        
+        const signature = sign.sign(PRIVATE_KEY, 'base64');
+        
+        return {
+            'KALSHI-ACCESS-KEY': KEY_ID,
+            'KALSHI-ACCESS-SIGNATURE': signature,
+            'KALSHI-ACCESS-TIMESTAMP': timestamp,
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        };
+    } catch (err) {
+        console.error("Crypto Sign Error:", err.message);
+        throw new Error("Invalid RSA Private Key format. Please check your Railway variables.");
+    }
 }
 
 // Endpoint: Fetch the active 15m BTC Market
