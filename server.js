@@ -87,16 +87,17 @@ app.get('/api/market', async (req, res) => {
 
         const marketRes = await axios.get(`${KALSHI_API_BASE}${requestPath}`, { headers });
 
-        if (marketRes.data.markets && marketRes.data.markets.length > 0) {
+        if (marketRes.data && marketRes.data.markets && marketRes.data.markets.length > 0) {
             // Sort the open markets by their close time to guarantee we target the soonest closing one
             const sortedMarkets = marketRes.data.markets.sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
-            res.json({ market: sortedMarkets[0] });
+            return res.json({ market: sortedMarkets[0] });
         } else {
-            res.status(404).json({ error: `No open markets found for ticker: ${seriesTicker}` });
+            return res.status(404).json({ error: `No open markets found for ticker: ${seriesTicker}` });
         }
     } catch (error) {
         console.error('Market Fetch Error:', error.response?.data || error.message);
-        res.status(500).json({ error: error.response?.data?.error?.message || error.message || "Failed to connect to Kalshi" });
+        const errorMsg = error.response?.data?.error?.message || error.message || "Failed to connect to Kalshi";
+        return res.status(500).json({ error: errorMsg });
     }
 });
 
@@ -133,16 +134,21 @@ app.post('/api/order', async (req, res) => {
 
         const orderRes = await axios.post(`${KALSHI_API_BASE}${requestPath}`, orderPayload, { headers });
 
-        res.json({ success: true, order: orderRes.data.order });
+        return res.json({ success: true, order: orderRes.data.order });
     } catch (error) {
         console.error('Order Error:', error.response?.data || error.message);
         const errMsg = error.response?.data?.error?.message || error.message || 'Failed to place order';
-        res.status(500).json({ error: errMsg });
+        return res.status(500).json({ error: errMsg });
     }
 });
 
 // Fallback to serve the main app
 app.get('*', (req, res) => {
+    // STRICT GUARD: If the request is for an API route but wasn't caught above, 
+    // force a JSON error instead of sending the HTML page.
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API Endpoint not found on server. Ensure deployment is fully updated.' });
+    }
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

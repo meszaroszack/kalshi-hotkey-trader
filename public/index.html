@@ -151,14 +151,23 @@
 
             try {
                 // CACHE BUSTER: Prevents browser from showing old 304 errors
-                const response = await fetch('/api/market?t=' + Date.now());
+                const response = await fetch('/api/market?t=' + Date.now(), {
+                    headers: { 'Accept': 'application/json' }
+                });
+                
                 const text = await response.text();
                 
+                if (!text) {
+                    throw new Error(`Server returned empty response (Status: ${response.status})`);
+                }
+
                 let data;
                 try {
                     data = JSON.parse(text);
                 } catch (e) {
-                    throw new Error(`Server returned non-JSON (${response.status}). If 200, cache issue. Try hard refreshing.`);
+                    // Forcefully display exactly what the backend sent so we can see the issue
+                    let preview = text.substring(0, 100).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    throw new Error(`Non-JSON Response (${response.status}): ${preview}`);
                 }
 
                 if (response.ok && data.market) {
@@ -202,7 +211,7 @@
             try {
                 const response = await fetch('/api/order', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify({
                         ticker: currentTicker,
                         action: action,
@@ -217,7 +226,8 @@
                 try {
                     data = JSON.parse(text);
                 } catch (e) {
-                    throw new Error(`Server returned non-JSON (${response.status}). App might be crashing.`);
+                    let preview = text.substring(0, 100).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    throw new Error(`Non-JSON Response (${response.status}): ${preview}`);
                 }
 
                 if (response.ok && data.success) {
