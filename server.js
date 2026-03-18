@@ -89,8 +89,30 @@ apiRouter.get('/market', async (req, res) => {
         const marketRes = await axios.get(`${KALSHI_API_BASE}${requestPath}`, { headers });
 
         if (marketRes.data && marketRes.data.markets && marketRes.data.markets.length > 0) {
-            const sortedMarkets = marketRes.data.markets.sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
-            return res.json({ market: sortedMarkets[0] });
+            const markets = marketRes.data.markets;
+            const now = new Date();
+
+            // Prefer the "current" 15m market where open_time <= now < close_time
+            const liveMarkets = markets.filter(m => {
+                const open = new Date(m.open_time);
+                const close = new Date(m.close_time);
+                return open <= now && now < close;
+            });
+
+            let targetMarket;
+            if (liveMarkets.length > 0) {
+                // If multiple match, pick the one that closes soonest.
+                targetMarket = liveMarkets.sort(
+                    (a, b) => new Date(a.close_time) - new Date(b.close_time)
+                )[0];
+            } else {
+                // Fallback: pick the next market that opens soonest in the future.
+                targetMarket = markets.sort(
+                    (a, b) => new Date(a.open_time) - new Date(b.open_time)
+                )[0];
+            }
+
+            return res.json({ market: targetMarket });
         } else {
             return res.status(404).json({ error: `No open markets found for ticker: ${seriesTicker}` });
         }
