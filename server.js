@@ -83,7 +83,10 @@ const apiRouter = express.Router();
 apiRouter.get('/market', async (req, res) => {
     try {
         const seriesTicker = process.env.BTC_SERIES_TICKER || 'KXBTC15M'; 
-        const requestPath = `/trade-api/v2/markets?limit=5&series_ticker=${seriesTicker}&status=open`;
+        // Ask Kalshi for a window of active markets in the BTC 15m series.
+        // "active" here means tradeable; we will further narrow to the currently
+        // open 15-minute window using open_time/close_time.
+        const requestPath = `/trade-api/v2/markets?limit=20&series_ticker=${seriesTicker}&status=active`;
         
         const headers = getAuthHeaders('GET', requestPath);
         const marketRes = await axios.get(`${KALSHI_API_BASE}${requestPath}`, { headers });
@@ -92,21 +95,12 @@ apiRouter.get('/market', async (req, res) => {
             const markets = marketRes.data.markets;
             const now = new Date();
 
-            // Build today's date token as used in tickers, e.g. "26MAR"
-            const monthAbbr = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-            const day = String(now.getUTCDate()).padStart(2, '0');
-            const month = monthAbbr[now.getUTCMonth()];
-            const todayToken = `${day}${month}`;
-
-            // Keep only markets whose ticker contains today's date token (e.g., *26MAR*)
-            const todaysMarkets = markets.filter(
-                m => typeof m.ticker === 'string' && m.ticker.includes(todayToken)
-            );
-
-            const candidateMarkets = todaysMarkets.length > 0 ? todaysMarkets : markets;
+            // Work only with markets that are currently "live" in time.
+            // We do NOT filter by encoded date in the ticker, because KXBTC15M
+            // uses an event date (e.g. 26MAR) that can differ from "today".
 
             // Prefer the "current" 15m market where open_time <= now < close_time
-            const liveMarkets = candidateMarkets.filter(m => {
+            const liveMarkets = markets.filter(m => {
                 const open = new Date(m.open_time);
                 const close = new Date(m.close_time);
                 return open <= now && now < close;
