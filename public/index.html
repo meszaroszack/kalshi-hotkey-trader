@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -231,12 +231,12 @@
                 }
 
                 if (response.ok && data.success) {
-                    showToast(`âœ… Successfully placed ${action.toUpperCase()} order!`, "success");
+                    showToast(`SUCCESS: Placed ${action.toUpperCase()} order.`, "success");
                 } else {
                     throw new Error(data.error || "Order execution failed");
                 }
             } catch (err) {
-                showToast(`âŒ Error: ${err.message}`, "error");
+                showToast(`ERROR: ${err.message}`, "error");
             } finally {
                 isExecuting = false;
             }
@@ -282,8 +282,8 @@
 
         // Initialize on load
         fetchMarket();
-        // Refresh market periodically (every 30 seconds)
-        setInterval(fetchMarket, 30000);
+        // Refresh market periodically (every 10 seconds) to keep up with 15m rolls
+        setInterval(fetchMarket, 10000);
 
     </script>
 </body>

@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
@@ -41,21 +41,24 @@ if (PRIVATE_KEY) {
     }
 }
 
-// Helper function to generate RSA signed headers for Kalshi API V2
+// Helper function to generate RSA-PSS signed headers for Kalshi API V2
 function getAuthHeaders(method, requestPath) {
     if (!KEY_ID || !PRIVATE_KEY) {
         throw new Error("Missing KALSHI_KEY_ID or KALSHI_PRIVATE_KEY in Railway Variables.");
     }
     
     const timestamp = Date.now().toString();
-    const msgString = timestamp + method + requestPath;
+    // As per Kalshi docs, the signature must be over the path WITHOUT query params.
+    const pathForSignature = requestPath.split('?')[0];
+    const msgString = timestamp + method + pathForSignature;
     
     try {
-        const sign = crypto.createSign('RSA-SHA256');
-        sign.update(msgString);
-        sign.end();
-        
-        const signature = sign.sign(PRIVATE_KEY, 'base64');
+        const signatureBuffer = crypto.sign('RSA-SHA256', Buffer.from(msgString, 'utf8'), {
+            key: PRIVATE_KEY,
+            padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+            saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST
+        });
+        const signature = signatureBuffer.toString('base64');
         
         return {
             'KALSHI-ACCESS-KEY': KEY_ID,
@@ -105,20 +108,42 @@ apiRouter.post('/order', async (req, res) => {
         return res.status(400).json({ error: 'No active market ticker specified.' });
     }
 
+    // Basic input validation – keep it simple but safe
+    const normalizedAction = String(action || '').toLowerCase();
+    const normalizedSide = String(side || '').toLowerCase();
+    const parsedCount = parseInt(count, 10);
+    const parsedPrice = parseInt(max_price, 10);
+
+    if (!['buy', 'sell'].includes(normalizedAction)) {
+        return res.status(400).json({ error: 'Invalid action. Must be "buy" or "sell".' });
+    }
+
+    if (!['yes', 'no'].includes(normalizedSide)) {
+        return res.status(400).json({ error: 'Invalid side. Must be "yes" or "no".' });
+    }
+
+    if (!Number.isInteger(parsedCount) || parsedCount <= 0) {
+        return res.status(400).json({ error: 'Invalid count. Must be a positive integer.' });
+    }
+
+    if (!Number.isInteger(parsedPrice) || parsedPrice < 1 || parsedPrice > 99) {
+        return res.status(400).json({ error: 'Invalid price. Must be an integer between 1 and 99 (cents).' });
+    }
+
     try {
         const orderPayload = {
             ticker: ticker,
-            action: action.toLowerCase(), 
-            side: side.toLowerCase(),     
-            count: parseInt(count),
+            action: normalizedAction,
+            side: normalizedSide,
+            count: parsedCount,
             type: 'limit',
             client_order_id: crypto.randomUUID() 
         };
 
-        if (side.toLowerCase() === 'yes') {
-            orderPayload.yes_price = parseInt(max_price);
+        if (normalizedSide === 'yes') {
+            orderPayload.yes_price = parsedPrice;
         } else {
-            orderPayload.no_price = parseInt(max_price);
+            orderPayload.no_price = parsedPrice;
         }
 
         const requestPath = '/trade-api/v2/portfolio/orders';
