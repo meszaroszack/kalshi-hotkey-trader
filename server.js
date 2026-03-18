@@ -20,9 +20,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// Serve the single HTML file from the public directory
-app.use(express.static(path.join(__dirname, 'public')));
-
 // Kalshi API Configuration
 const KALSHI_API_BASE = (process.env.KALSHI_API_BASE || 'https://trading-api.kalshi.com').replace(/\/$/, '');
 
@@ -34,7 +31,6 @@ let PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY;
 if (PRIVATE_KEY) {
     PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, '\n');
     if (!PRIVATE_KEY.includes('\n')) {
-        // If Railway stripped all newlines and replaced them with spaces, reconstruct the PEM format
         PRIVATE_KEY = PRIVATE_KEY.replace('-----BEGIN RSA PRIVATE KEY-----', '-----BEGIN RSA PRIVATE KEY-----\n');
         PRIVATE_KEY = PRIVATE_KEY.replace('-----END RSA PRIVATE KEY-----', '\n-----END RSA PRIVATE KEY-----');
         const parts = PRIVATE_KEY.split('\n');
@@ -74,21 +70,21 @@ function getAuthHeaders(method, requestPath) {
     }
 }
 
+// ==========================================
+// STRICT API ROUTER - NO HTML ALLOWED HERE
+// ==========================================
+const apiRouter = express.Router();
+
 // Endpoint: Fetch the active 15m BTC Market
-app.get('/api/market', async (req, res) => {
+apiRouter.get('/market', async (req, res) => {
     try {
-        // Correctly default to the 15-minute BTC market series
         const seriesTicker = process.env.BTC_SERIES_TICKER || 'KXBTC15M'; 
-        
-        // Fetch up to 5 open markets for this series to account for overlapping open markets
         const requestPath = `/trade-api/v2/markets?limit=5&series_ticker=${seriesTicker}&status=open`;
         
         const headers = getAuthHeaders('GET', requestPath);
-
         const marketRes = await axios.get(`${KALSHI_API_BASE}${requestPath}`, { headers });
 
         if (marketRes.data && marketRes.data.markets && marketRes.data.markets.length > 0) {
-            // Sort the open markets by their close time to guarantee we target the soonest closing one
             const sortedMarkets = marketRes.data.markets.sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
             return res.json({ market: sortedMarkets[0] });
         } else {
@@ -102,7 +98,7 @@ app.get('/api/market', async (req, res) => {
 });
 
 // Endpoint: Receive frontend hotkey trigger and execute order
-app.post('/api/order', async (req, res) => {
+apiRouter.post('/order', async (req, res) => {
     const { action, side, count, max_price, ticker } = req.body;
     
     if (!ticker) {
@@ -110,17 +106,15 @@ app.post('/api/order', async (req, res) => {
     }
 
     try {
-        // Construct the limit order payload for Kalshi
         const orderPayload = {
             ticker: ticker,
-            action: action.toLowerCase(), // 'buy' or 'sell'
-            side: side.toLowerCase(),     // 'yes' or 'no'
+            action: action.toLowerCase(), 
+            side: side.toLowerCase(),     
             count: parseInt(count),
             type: 'limit',
-            client_order_id: crypto.randomUUID() // Standard UUID for Kalshi orders
+            client_order_id: crypto.randomUUID() 
         };
 
-        // Kalshi requires the price parameter to match the side
         if (side.toLowerCase() === 'yes') {
             orderPayload.yes_price = parseInt(max_price);
         } else {
@@ -142,16 +136,24 @@ app.post('/api/order', async (req, res) => {
     }
 });
 
-// Fallback to serve the main app
+// CATCH-ALL FOR API: Force JSON error if a bad API path is hit
+apiRouter.all('*', (req, res) => {
+    return res.status(404).json({ error: `API Endpoint not found: ${req.originalUrl}` });
+});
+
+// Mount the strictly isolated API router
+app.use('/api', apiRouter);
+
+// ==========================================
+// FRONTEND / STATIC FILES ROUTER
+// ==========================================
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Fallback to serve the HTML app for any non-API routes
 app.get('*', (req, res) => {
-    // STRICT GUARD: If the request is for an API route but wasn't caught above, 
-    // force a JSON error instead of sending the HTML page.
-    if (req.path.startsWith('/api/')) {
-        return res.status(404).json({ error: 'API Endpoint not found on server. Ensure deployment is fully updated.' });
-    }
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`Kalshi Hotkey Trader listening on port ${PORT}`);
+    console.log(`Kalshi Hotkey Trader strictly listening on port ${PORT}`);
 });
