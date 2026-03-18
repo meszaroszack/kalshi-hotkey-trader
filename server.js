@@ -83,10 +83,10 @@ const apiRouter = express.Router();
 apiRouter.get('/market', async (req, res) => {
     try {
         const seriesTicker = process.env.BTC_SERIES_TICKER || 'KXBTC15M'; 
-        // Ask Kalshi for a window of active markets in the BTC 15m series.
-        // "active" here means tradeable; we will further narrow to the currently
-        // open 15-minute window using open_time/close_time.
-        const requestPath = `/trade-api/v2/markets?limit=20&series_ticker=${seriesTicker}&status=active`;
+        // Ask Kalshi for a window of open markets in the BTC 15m series.
+        // We'll further narrow to the currently open 15-minute window using
+        // open_time/close_time. Kalshi supports status=open here (not "active").
+        const requestPath = `/trade-api/v2/markets?limit=20&series_ticker=${seriesTicker}&status=open`;
         
         const headers = getAuthHeaders('GET', requestPath);
         const marketRes = await axios.get(`${KALSHI_API_BASE}${requestPath}`, { headers });
