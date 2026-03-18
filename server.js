@@ -10,6 +10,16 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Force no-cache on all routes so Railway/Browser never serve 304s
+app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+    next();
+});
+
 // Serve the single HTML file from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
