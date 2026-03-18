@@ -40,7 +40,7 @@
                 </span>
             </div>
             
-            <div class="mt-4 bg-slate-900 rounded-lg p-4 flex flex-col gap-1 border border-slate-700">
+            <div class="mt-4 bg-slate-900 rounded-lg p-4 flex flex-col gap-2 border border-slate-700">
                 <span class="text-slate-400 text-sm font-semibold uppercase tracking-wider">Target Market</span>
                 <div class="flex items-center gap-3">
                     <span id="market-ticker" class="text-xl font-mono text-white font-bold tracking-tight">Loading...</span>
@@ -48,6 +48,7 @@
                         <i data-lucide="refresh-cw" class="w-4 h-4 text-slate-400"></i>
                     </button>
                 </div>
+                <span id="market-window" class="text-xs font-mono text-slate-400">Window: --:-- → --:-- (Kalshi time)</span>
             </div>
         </div>
 
@@ -130,6 +131,7 @@
         const inputSellPrice = document.getElementById('input-sell-price');
         const elTicker = document.getElementById('market-ticker');
         const elStatus = document.getElementById('connection-status');
+        const elWindow = document.getElementById('market-window');
 
         // Toggle Contract Side
         function setSide(side) {
@@ -175,8 +177,21 @@
                     elTicker.innerText = currentTicker;
                     elStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-green-400"></span> Live`;
                     elStatus.className = "px-3 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded-full border border-green-500/30 flex items-center gap-2";
+                    
+                    // Display the 15m window in Kalshi time (one hour behind ET, approximated as America/Chicago)
+                    try {
+                        const openUtc = new Date(data.market.open_time);
+                        const closeUtc = new Date(data.market.close_time);
+                        const opts = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Chicago' };
+                        const openStr = openUtc.toLocaleTimeString('en-US', opts);
+                        const closeStr = closeUtc.toLocaleTimeString('en-US', opts);
+                        elWindow.innerText = `Window: ${openStr} → ${closeStr} (Kalshi time)`;
+                    } catch {
+                        elWindow.innerText = `Window: unavailable`;
+                    }
                 } else {
                     elTicker.innerText = "No Market Found";
+                    elWindow.innerText = "Window: --:-- → --:-- (Kalshi time)";
                     elStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-400"></span> Error`;
                     elStatus.className = "px-3 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded-full border border-red-500/30 flex items-center gap-2";
                     showToast(data.error || "Failed to fetch market from Kalshi", "error");
