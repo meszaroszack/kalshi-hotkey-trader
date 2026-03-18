@@ -92,8 +92,21 @@ apiRouter.get('/market', async (req, res) => {
             const markets = marketRes.data.markets;
             const now = new Date();
 
+            // Build today's date token as used in tickers, e.g. "26MAR"
+            const monthAbbr = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+            const day = String(now.getUTCDate()).padStart(2, '0');
+            const month = monthAbbr[now.getUTCMonth()];
+            const todayToken = `${day}${month}`;
+
+            // Keep only markets whose ticker contains today's date token (e.g., *26MAR*)
+            const todaysMarkets = markets.filter(
+                m => typeof m.ticker === 'string' && m.ticker.includes(todayToken)
+            );
+
+            const candidateMarkets = todaysMarkets.length > 0 ? todaysMarkets : markets;
+
             // Prefer the "current" 15m market where open_time <= now < close_time
-            const liveMarkets = markets.filter(m => {
+            const liveMarkets = candidateMarkets.filter(m => {
                 const open = new Date(m.open_time);
                 const close = new Date(m.close_time);
                 return open <= now && now < close;
