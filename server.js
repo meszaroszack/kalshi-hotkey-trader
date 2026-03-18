@@ -14,7 +14,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Kalshi API Configuration
-const KALSHI_API_BASE = process.env.KALSHI_API_BASE || 'https://trading-api.kalshi.com';
+const KALSHI_API_BASE = (process.env.KALSHI_API_BASE || 'https://trading-api.kalshi.com').replace(/\/$/, '');
 
 // API Keys
 const KEY_ID = process.env.KALSHI_KEY_ID;
@@ -67,19 +67,22 @@ function getAuthHeaders(method, requestPath) {
 // Endpoint: Fetch the active 15m BTC Market
 app.get('/api/market', async (req, res) => {
     try {
-        const seriesTicker = process.env.BTC_SERIES_TICKER || 'KXBTC'; 
+        // Correctly default to the 15-minute BTC market series
+        const seriesTicker = process.env.BTC_SERIES_TICKER || 'KXBTC15M'; 
         
-        // Exact path is required for the signature to match
-        const requestPath = `/trade-api/v2/markets?limit=1&series_ticker=${seriesTicker}&status=open`;
+        // Fetch up to 5 open markets for this series to account for overlapping open markets
+        const requestPath = `/trade-api/v2/markets?limit=5&series_ticker=${seriesTicker}&status=open`;
         
         const headers = getAuthHeaders('GET', requestPath);
 
         const marketRes = await axios.get(`${KALSHI_API_BASE}${requestPath}`, { headers });
 
         if (marketRes.data.markets && marketRes.data.markets.length > 0) {
-            res.json({ market: marketRes.data.markets[0] });
+            // Sort the open markets by their close time to guarantee we target the soonest closing one
+            const sortedMarkets = marketRes.data.markets.sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
+            res.json({ market: sortedMarkets[0] });
         } else {
-            res.status(404).json({ error: 'No open 15m BTC markets found at this time.' });
+            res.status(404).json({ error: `No open markets found for ticker: ${seriesTicker}` });
         }
     } catch (error) {
         console.error('Market Fetch Error:', error.response?.data || error.message);

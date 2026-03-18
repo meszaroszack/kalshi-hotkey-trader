@@ -150,14 +150,15 @@
             elStatus.className = "px-3 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded-full border border-yellow-500/30 flex items-center gap-2";
 
             try {
-                const response = await fetch('/api/market');
+                // CACHE BUSTER: Prevents browser from showing old 304 errors
+                const response = await fetch('/api/market?t=' + Date.now());
                 const text = await response.text();
                 
                 let data;
                 try {
                     data = JSON.parse(text);
                 } catch (e) {
-                    throw new Error(`Server returned non-JSON (${response.status}). App might be crashing.`);
+                    throw new Error(`Server returned non-JSON (${response.status}). If 200, cache issue. Try hard refreshing.`);
                 }
 
                 if (response.ok && data.market) {
@@ -169,10 +170,11 @@
                     elTicker.innerText = "No Market Found";
                     elStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-400"></span> Error`;
                     elStatus.className = "px-3 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded-full border border-red-500/30 flex items-center gap-2";
-                    throw new Error(data.error || "Failed to fetch market from Kalshi");
+                    showToast(data.error || "Failed to fetch market from Kalshi", "error");
                 }
             } catch (err) {
-                elTicker.innerText = "Connection Failed";
+                // If the connection ACTUALLY breaks, show the true error
+                elTicker.innerText = "Error - Check Toast";
                 showToast(`Error: ${err.message}`, "error");
             }
         }
@@ -245,7 +247,7 @@
             
             container.appendChild(toast);
             
-            // Remove after 3 seconds // Increased to 6s for longer error messages
+            // Remove after 6s for longer error messages
             setTimeout(() => {
                 toast.style.opacity = '0';
                 toast.style.transform = 'translateX(100%)';

@@ -22,7 +22,7 @@ This is a lightweight manual trading interface configured to trade 15-minute BTC
    - Add the following environment variables:
      - `KALSHI_KEY_ID`: Your Kalshi API Key ID.
      - `KALSHI_PRIVATE_KEY`: Your Kalshi Private Key string (include the `-----BEGIN RSA PRIVATE KEY-----` wrapper).
-     - `BTC_SERIES_TICKER`: (Optional) Defaults to `KXBTC`. 
+     - `BTC_SERIES_TICKER`: (Optional) Defaults to `KXBTC15M`. 
 
 4. **Access your App:**
    - Go to the **Settings** tab in Railway, scroll down to **Networking**, and click **Generate Domain**.
