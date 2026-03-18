@@ -21,7 +21,8 @@ app.use((req, res, next) => {
 });
 
 // Kalshi API Configuration
-const KALSHI_API_BASE = (process.env.KALSHI_API_BASE || 'https://trading-api.kalshi.com').replace(/\/$/, '');
+// Default to the official Exchange API v2 base URL.
+const KALSHI_API_BASE = (process.env.KALSHI_API_BASE || 'https://api.elections.kalshi.com').replace(/\/$/, '');
 
 // API Keys
 const KEY_ID = process.env.KALSHI_KEY_ID;
